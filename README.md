@@ -193,3 +193,23 @@ Pull requests are welcome! Ideas for improvement:
 ---
 
 *Built with ❤️ using Python's standard library only.*
+
+---
+
+## 🪟 Windows Edition
+
+A dedicated Windows version is included with full interface auto-detection.
+
+### Run on Windows (easiest way)
+Just double-click `run_windows.bat` — it handles everything automatically, including requesting admin privileges.
+
+### Or run manually in PowerShell
+```powershell
+python src\scanner_windows.py
+```
+
+### Windows features
+- Auto-detects **all network interfaces** (WiFi, Ethernet, VPN) and shows them in the menu
+- Works with Windows ARP table format (`aa-bb-cc-dd-ee-ff`)
+- Automatically requests **Administrator** privileges for full ARP access
+- Pauses at the end so the window doesn't close immediately
