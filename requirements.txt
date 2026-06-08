@@ -1,0 +1,4 @@
+# No third-party dependencies required!
+# Samsung Finder uses only Python standard library modules:
+#   socket, subprocess, ipaddress, concurrent.futures,
+#   re, platform, struct, sys, time, datetime
