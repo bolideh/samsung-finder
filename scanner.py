@@ -214,22 +214,116 @@ def print_results(devices):
     print()
 
 
+def get_vpc_range():
+    """Try to detect AWS VPC subnet via instance metadata."""
+    try:
+        # AWS IMDSv2 - get token first
+        import urllib.request
+        req = urllib.request.Request(
+            "http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
+            method="PUT"
+        )
+        token = urllib.request.urlopen(req, timeout=2).read().decode()
+
+        req2 = urllib.request.Request(
+            "http://169.254.169.254/latest/meta-data/network/interfaces/macs/",
+            headers={"X-aws-ec2-metadata-token": token}
+        )
+        mac = urllib.request.urlopen(req2, timeout=2).read().decode().strip().split("\n")[0]
+
+        req3 = urllib.request.Request(
+            f"http://169.254.169.254/latest/meta-data/network/interfaces/macs/{mac}subnet-ipv4-cidr-block",
+            headers={"X-aws-ec2-metadata-token": token}
+        )
+        cidr = urllib.request.urlopen(req3, timeout=2).read().decode().strip()
+        return cidr
+    except Exception:
+        return None
+
+
+def show_menu():
+    """Show interactive mode selection menu."""
+    local_ip = get_local_ip()
+    local_range = get_network_range(local_ip)
+    vpc_range = get_vpc_range()
+
+    print(f"{BOLD}  Select scan mode:{RESET}\n")
+    options = []
+
+    # Option 1: current interface
+    idx = 1
+    print(f"  {CYAN}[{idx}]{RESET} Current network (auto-detected)")
+    print(f"      {DIM}→ {local_range}  (your IP: {local_ip}){RESET}")
+    options.append(("current", local_range))
+    idx += 1
+
+    # Option 2: AWS VPC
+    if vpc_range:
+        print(f"\n  {CYAN}[{idx}]{RESET} AWS VPC subnet")
+        print(f"      {DIM}→ {vpc_range}{RESET}")
+        options.append(("vpc", vpc_range))
+        idx += 1
+    else:
+        print(f"\n  {DIM}[−] AWS VPC not detected (not running on EC2 or metadata unavailable){RESET}")
+
+    # Option 3: Custom range
+    print(f"\n  {CYAN}[{idx}]{RESET} Custom IP range")
+    print(f"      {DIM}→ Enter any subnet e.g. 192.168.1.0/24{RESET}")
+    options.append(("custom", None))
+    idx += 1
+
+    # Option 4: Multiple ranges
+    print(f"\n  {CYAN}[{idx}]{RESET} Scan multiple ranges at once")
+    options.append(("multi", None))
+
+    print()
+    while True:
+        try:
+            choice = input(f"  {BOLD}Enter choice [1-{idx}]: {RESET}").strip()
+            c = int(choice)
+            if 1 <= c <= idx:
+                break
+            print(f"  {RED}Please enter a number between 1 and {idx}{RESET}")
+        except (ValueError, KeyboardInterrupt):
+            print(f"\n  {YELLOW}Exiting.{RESET}\n")
+            sys.exit(0)
+
+    mode, preset_range = options[c - 1]
+
+    if mode == "custom":
+        preset_range = input(f"  {BOLD}Enter subnet (e.g. 192.168.1.0/24): {RESET}").strip()
+
+    if mode == "multi":
+        raw = input(f"  {BOLD}Enter subnets separated by commas: {RESET}").strip()
+        return [r.strip() for r in raw.split(",") if r.strip()]
+
+    return [preset_range]
+
+
 def main():
     banner()
-    local_ip = get_local_ip()
-    network_range = get_network_range(local_ip)
 
-    # Allow custom range via CLI arg
+    # Non-interactive: range passed as CLI argument
     if len(sys.argv) > 1:
-        network_range = sys.argv[1]
+        ranges = sys.argv[1:]
+    else:
+        ranges = show_menu()
 
-    print(f"{BOLD}  Scanning network...{RESET}\n")
-    start = time.time()
-    devices = scan_network(network_range)
-    elapsed = time.time() - start
+    all_devices = []
+    total_start = time.time()
 
-    print_results(devices)
-    print(f"  {DIM}Scan completed in {elapsed:.1f}s{RESET}\n")
+    for network_range in ranges:
+        print(f"\n{BOLD}  Scanning {network_range}...{RESET}\n")
+        start = time.time()
+        devices = scan_network(network_range)
+        elapsed = time.time() - start
+        all_devices.extend(devices)
+        print(f"  {DIM}Range scanned in {elapsed:.1f}s{RESET}")
+
+    print_results(all_devices)
+    total_elapsed = time.time() - total_start
+    print(f"  {DIM}Total scan time: {total_elapsed:.1f}s{RESET}\n")
 
 
 if __name__ == "__main__":
